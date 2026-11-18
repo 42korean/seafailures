@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>크레인 고장이력관리 분석기 Rev.011</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Offline/Local Backup Data -->
+    <script src="data/backup_data.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .pivot-cell { cursor: pointer; transition: all 0.15s ease-in-out; }
+        .pivot-cell:hover { background-color: #dbeafe !important; transform: scale(1.02); font-weight: bold; color: #1d4ed8; }
+        .sortable-header { cursor: pointer; user-select: none; transition: background-color 0.15s; }
+        .sortable-header:hover { background-color: #cbd5e1; }
+        .detail-sortable { cursor: pointer; user-select: none; transition: background-color 0.15s; }
+        .detail-sortable:hover { background-color: #e2e8f0; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        .shake {
+            animation: shake 0.35s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen antialiased">
+
+    <!-- ========================================== -->
+    <!-- 1. Login View (Initial Lock Screen) -->
+    <!-- ========================================== -->
+    <div id="loginView" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-4 transition-opacity duration-300">
+        <div class="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 sm:p-10 overflow-hidden">
+            <!-- Top Deco Bar -->
+            <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-400"></div>
+
+            <!-- Logo and System Title -->
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 text-3xl mb-4 shadow-inner">
+                    🏗️
+                </div>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">
+                    크레인 고장이력관리 분석기 Rev.011
+                </h1>
+                <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider mt-1">
+                    CRANE FAILURE HISTORY ANALYZER Rev.011
+                </p>
+                <p class="text-xs text-slate-500 mt-2">
+                    Please enter the administrator password to access the system.
+                </p>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-5">
+                <div>
+                    <label for="loginPassword" class="block text-xs font-bold text-slate-700 mb-2">
+                        Password
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                            <!-- Lock Icon -->
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <input
+                            type="password"
+                            id="loginPassword"
+                            autocomplete="current-password"
+                            placeholder="Enter your password"
+                            class="w-full pl-10 pr-11 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all shadow-sm"
+                            required
+                        />
+                        <button
+                            type="button"
+                            onclick="togglePasswordVisibility('loginPassword', 'eyeIconLogin')"
+                            class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                            tabindex="-1"
+                            title="Show/Hide Password"
+                        >
+                            <span id="eyeIconLogin">👁️</span>
+                        </button>
+                    </div>
+                    <div id="capsLockWarning" class="hidden text-[11px] text-amber-600 mt-1 font-medium flex items-center gap-1">
+                        ⚠️ Caps Lock is ON.
+                    </div>
+                </div>
+
+                <!-- Error Notification -->
+                <div id="loginErrorMsg" class="hidden text-xs bg-rose-50 border border-rose-200 text-rose-700 px-3.5 py-2.5 rounded-xl font-medium flex items-center gap-2">
+                    <span>❌</span>
+                    <span id="loginErrorText">Incorrect password.</span>
+                </div>
+
+                <!-- Remember Me Option -->
+                <div class="flex items-center justify-between text-xs">
+                    <label class="inline-flex items-center gap-2 cursor-pointer text-slate-600">
+                        <input type="checkbox" id="rememberMeCheckbox" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                        <span>Keep me logged in (30 days)</span>
+                    </label>
+                </div>
+
+                <!-- Login Button -->
+                <button
+                    type="submit"
+                    class="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-sm shadow-md hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center gap-2"
+                >
+                    <span>Login</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
+            </form>
+
+            <!-- Default Password Footer -->
+            <div class="mt-6 pt-5 border-t border-slate-100 text-center">
+                <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50/70 border border-blue-200/60 rounded-lg text-xs font-semibold text-blue-800">
+                    <span>🔑 Default Password:</span>
+                    <code class="bg-white px-1.5 py-0.5 rounded font-mono text-blue-900 border border-blue-200">admin121</code>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 2. Main Dashboard (Visible after login) -->
+    <!-- ========================================== -->
+    <div id="dashboardView" class="hidden max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Header -->
+        <header class="mb-6 pb-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-blue-700 flex items-center gap-2">
+                    🏗️ 크레인 고장이력관리 분석기 Rev.011
+                </h1>
+                <p class="text-sm text-slate-500 mt-1">
+                    Select a Terminal BU to load the latest data and start pivot analysis.
+                </p>
+            </div>
+            
+            <!-- Top Right: Status Badge & Auth Actions -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Sync Status Badge -->
+                <div id="syncStatus" class="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm">
+                    ☁️ Standby
+                </div>
+
+                <!-- Change Password Button -->
+                <button
+                    onclick="openChangePasswordModal()"
+                    class="text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
+                    title="Change Password"
+                >
+                    <span>🔑 Password</span>
+                </button>
+
+                <!-- Logout Button -->
+                <button
+                    onclick="handleLogout()"
+                    class="text-xs bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-xl font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
+                    title="Logout"
+                >
+                    <span>🔒 Logout</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Pivot Option Configuration Panel -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 space-y-6">
+            
+            <!-- BU Selection & File Upload Section -->
+            <div class="border-b border-slate-100 pb-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <h2 class="text-base font-bold text-slate-700 flex items-center gap-2">
+                        🛠️ 1. Select Terminal BU
+                    </h2>
+                    <!-- Local CSV Upload Option -->
+                    <label class="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">
+                        <span>📁 Open Local CSV File</span>
+                        <input type="file" id="localFileInput" accept=".csv" onchange="handleLocalFileUpload(event)" class="hidden">
+                    </label>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="sm:col-span-1">
+                        <select id="buSelect" onchange="loadCSVByBU()" class="w-full bg-blue-50 border border-blue-300 text-blue-900 rounded-lg p-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer">
+                            <option value="">-- Select BU --</option>
+                            <option value="BNCT">BNCT</option>
+                            <option value="LCIT">LCIT</option>
+                            <option value="SBCP">SBCP</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2 flex items-center">
+                        <span id="activeFileInfo" class="text-xs text-slate-500 font-medium">
+                            Selected Data: None (Select BU or load local CSV)
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Double Filter Configuration Section -->
+            <div class="border-b border-slate-100 pb-6">
+                <h2 class="text-base font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    🔍 2. Data Filtering (Multi-condition)
+                </h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- Filter 1 -->
+                    <div class="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1.5">Filter Criteria 1</label>
+                            <select id="filterFieldSelect1" onchange="updateFilterCheckboxes(1)" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">-- Data load required --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center text-xs font-semibold text-slate-600 mb-1.5">
+                                <span id="filter1Counter">Select Conditions (Checkbox)</span>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="toggleAllFilters(1, true)" class="text-[10px] text-blue-600 hover:underline">Select All</button>
+                                    <span class="text-slate-300">|</span>
+                                    <button onclick="toggleAllFilters(1, false)" class="text-[10px] text-red-600 hover:underline">Deselect All</button>
+                                </div>
+                            </div>
+                            <!-- Filter Search Input -->
+                            <div class="mb-2">
+                                <input
+                                    type="text"
+                                    id="filter1Search"
+                                    placeholder="Search items..."
+                                    oninput="filterCheckboxItems(1)"
+                                    class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div id="filterCheckboxContainer1" class="border border-slate-300 rounded-lg bg-white p-2.5 h-32 overflow-y-auto custom-scrollbar flex flex-wrap gap-2 content-start">
+                                <span class="text-xs text-slate-400 p-1">Items will appear after selecting a BU.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter 2 -->
+                    <div class="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1.5">Filter Criteria 2</label>
+                            <select id="filterFieldSelect2" onchange="updateFilterCheckboxes(2)" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">-- Data load required --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center text-xs font-semibold text-slate-600 mb-1.5">
+                                <span id="filter2Counter">Select Conditions (Checkbox)</span>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="toggleAllFilters(2, true)" class="text-[10px] text-blue-600 hover:underline">Select All</button>
+                                    <span class="text-slate-300">|</span>
+                                    <button onclick="toggleAllFilters(2, false)" class="text-[10px] text-red-600 hover:underline">Deselect All</button>
+                                </div>
+                            </div>
+                            <!-- Filter Search Input -->
+                            <div class="mb-2">
+                                <input
+                                    type="text"
+                                    id="filter2Search"
+                                    placeholder="Search items..."
+                                    oninput="filterCheckboxItems(2)"
+                                    class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div id="filterCheckboxContainer2" class="border border-slate-300 rounded-lg bg-white p-2.5 h-32 overflow-y-auto custom-scrollbar flex flex-wrap gap-2 content-start">
+                                <span class="text-xs text-slate-400 p-1">Items will appear after selecting a BU.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Pivot Table Axis Configuration -->
+            <div>
+                <h2 class="text-base font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    ⚙️ 3. Table Configuration
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Row Field (Horizontal Axis)</label>
+                        <select id="rowFieldSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Column Field (Vertical Axis)</label>
+                        <select id="colFieldSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">-- Select (Optional) --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Target Value Field</label>
+                        <select id="valFieldSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Aggregation Type</label>
+                        <select id="aggTypeSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="COUNT">Count</option>
+                            <option value="SUM">Sum</option>
+                            <option value="AVERAGE">Average</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pivot Table Results Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+            <div class="p-4 bg-slate-100 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-slate-800 text-sm">
+                        📊 Query Results <span class="text-xs font-normal text-slate-500 ml-2">(Click values for details, click headers to sort)</span>
+                    </span>
+                    <span id="pivotSummaryBadge" class="text-xs px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full font-medium hidden"></span>
+                </div>
+                <button onclick="downloadPivotAsCSV()" class="text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors">
+                    <span>📥 Download Pivot CSV</span>
+                </button>
+            </div>
+            <div class="overflow-x-auto max-h-[460px] overflow-y-auto custom-scrollbar">
+                <table id="pivotTable" class="w-full text-xs text-left border-collapse">
+                    <thead id="pivotHead" class="bg-slate-50 text-slate-700 font-semibold sticky top-0 z-10 border-b border-slate-300 shadow-sm">
+                        <tr>
+                            <th class="p-4 text-center text-slate-400 font-normal">The pivot table will be generated automatically after selecting a BU.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pivotBody" class="divide-y divide-slate-100 font-mono">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Detail Data View Section -->
+        <div id="detailsSection" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
+            
+            <div class="p-4 bg-indigo-50 border-b border-indigo-100 flex flex-wrap justify-between items-center gap-2">
+                <span id="detailsTitle" class="font-bold text-indigo-900 text-sm">🔍 Detail Data View</span>
+                <div class="flex items-center gap-2">
+                    <button onclick="downloadDetailsAsCSV()" class="text-xs bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-medium px-2.5 py-1 rounded-md shadow-sm transition-colors">
+                        Download Details CSV
+                    </button>
+                    <button onclick="document.getElementById('detailsSection').classList.add('hidden')" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-2 py-1 rounded-md">
+                        Close ✖
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Detail Field Selection -->
+            <div class="p-3 bg-white border-b border-slate-200 flex flex-col gap-2">
+                <div class="flex justify-between items-center text-xs font-bold text-green-700">
+                    <span>✅ Select Fields to Display</span>
+                    <div class="flex gap-2">
+                        <button onclick="toggleAllDetailFields(true)" class="text-[10px] text-blue-600 hover:underline">Select All</button>
+                        <span class="text-slate-300">|</span>
+                        <button onclick="toggleAllDetailFields(false)" class="text-[10px] text-red-600 hover:underline">Deselect All</button>
+                    </div>
+                </div>
+                <div id="detailFieldCheckboxContainer" class="flex flex-wrap gap-2 content-start max-h-24 overflow-y-auto custom-scrollbar"></div>
+            </div>
+
+            <!-- Detail Table Area -->
+            <div class="overflow-x-auto max-h-[500px] overflow-y-auto custom-scrollbar">
+                <table class="w-full text-xs text-left border-collapse whitespace-nowrap">
+                    <thead id="detailsHead" class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 shadow-sm sticky top-0 z-10">
+                    </thead>
+                    <tbody id="detailsBody" class="divide-y divide-slate-100">
+                    </tbody>
+                </table>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 3. Password Change Modal -->
+    <!-- ========================================== -->
+    <div id="changePasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-6 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    🔑 Change Password
+                </h3>
+                <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-slate-600 text-sm">✖</button>
+            </div>
+
+            <form onsubmit="handleSaveNewPassword(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Current Password</label>
+                    <input
+                        type="password"
+                        id="currentPwInput"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="Enter current password"
+                        required
+                    />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">New Password</label>
+                    <input
+                        type="password"
+                        id="newPwInput"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="Enter new password"
+                        required
+                    />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Confirm New Password</label>
+                    <input
+                        type="password"
+                        id="confirmNewPwInput"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="Re-enter new password"
+                        required
+                    />
+                </div>
+
+                <div id="changePwMsg" class="hidden text-xs py-1.5 font-medium"></div>
+
+                <div class="flex items-center justify-between pt-2">
+                    <button
+                        type="button"
+                        onclick="resetPasswordToDefault()"
+                        class="text-xs text-slate-500 hover:text-rose-600 underline"
+                        title="Reset to admin121"
+                    >
+                        Reset to default password
+                    </button>
+                    <div class="flex gap-2">
+                        <button
+                            type="button"
+                            onclick="closeChangePasswordModal()"
+                            class="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            class="px-3.5 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-bold shadow-sm"
+                        >
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 4. Scripts -->
+    <!-- ========================================== -->
+    <script>
+        // Default password and storage keys
+        const DEFAULT_PASSWORD = "admin121";
+        const STORAGE_KEY_CUSTOM_PW = "crane_app_custom_password";
+        const STORAGE_KEY_AUTH_SESSION = "crane_app_auth_session";
+        const STORAGE_KEY_AUTH_REMEMBER = "crane_app_auth_remember";
+
+        // Repository connection info
+        const GITHUB_OWNER = "42korean";
+        const GITHUB_REPO = "seafailures";
+
+        // Offline / Local fallback files
+        const LOCAL_FALLBACK_FILES = {
+            "BNCT": "data/BNCT_20261116_152227.csv",
+            "LCIT": "data/LCIT_20261116_152227.csv",
+            "SBCP": "data/SBCP_20261116_152227.csv"
+        };
+
+        let currentDataRows = []; 
+        let currentFields = [];
+        let selectedDetailFields = [];
+        let filteredRowsCache = [];
+        let matrixDataRows = {}; 
+        
+        let pivotSortCol = ''; 
+        let pivotSortAsc = false; 
+
+        let currentDetailRows = [];
+        let currentSortField = '';
+        let currentSortAsc = true;
+
+        // ----------------------------------------
+        // 1. Authentication & Login Logic
+        // ----------------------------------------
+        function getEffectivePassword() {
+            return localStorage.getItem(STORAGE_KEY_CUSTOM_PW) || DEFAULT_PASSWORD;
+        }
+
+        function isUserAuthenticated() {
+            return sessionStorage.getItem(STORAGE_KEY_AUTH_SESSION) === "true" ||
+                   localStorage.getItem(STORAGE_KEY_AUTH_REMEMBER) === "true";
+        }
+
+        function checkAuthStatusOnLoad() {
+            if (isUserAuthenticated()) {
+                showDashboard();
+            } else {
+                showLoginView();
+            }
+        }
+
+        function showDashboard() {
+            const loginView = document.getElementById('loginView');
+            const dashboardView = document.getElementById('dashboardView');
+            loginView.classList.add('hidden');
+            dashboardView.classList.remove('hidden');
+        }
+
+        function showLoginView() {
+            const loginView = document.getElementById('loginView');
+            const dashboardView = document.getElementById('dashboardView');
+            dashboardView.classList.add('hidden');
+            loginView.classList.remove('hidden');
+            
+            const pwInput = document.getElementById('loginPassword');
+            if (pwInput) {
+                pwInput.value = '';
+                setTimeout(() => pwInput.focus(), 100);
+            }
+            hideLoginError();
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const inputPw = document.getElementById('loginPassword').value.trim();
+            const rememberMe = document.getElementById('rememberMeCheckbox').checked;
+            const expectedPw = getEffectivePassword();
+
+            if (inputPw === expectedPw) {
+                // Login success
+                sessionStorage.setItem(STORAGE_KEY_AUTH_SESSION, "true");
+                if (rememberMe) {
+                    localStorage.setItem(STORAGE_KEY_AUTH_REMEMBER, "true");
+                } else {
+                    localStorage.removeItem(STORAGE_KEY_AUTH_REMEMBER);
+                }
+                hideLoginError();
+                showDashboard();
+            } else {
+                // Login failed: shake animation & error display
+                showLoginError("Incorrect password. (Default: admin121)");
+                const card = document.querySelector('#loginView > div');
+                card.classList.remove('shake');
+                void card.offsetWidth; // Trigger reflow
+                card.classList.add('shake');
+                const pwInput = document.getElementById('loginPassword');
+                pwInput.select();
+            }
+        }
+
+        function showLoginError(msg) {
+            const errBox = document.getElementById('loginErrorMsg');
+            const errText = document.getElementById('loginErrorText');
+            errText.innerText = msg;
+            errBox.classList.remove('hidden');
+        }
+
+        function hideLoginError() {
+            const errBox = document.getElementById('loginErrorMsg');
+            if (errBox) errBox.classList.add('hidden');
+        }
+
+        function handleLogout() {
+            if (!confirm('Are you sure you want to logout?')) return;
+            sessionStorage.removeItem(STORAGE_KEY_AUTH_SESSION);
+            localStorage.removeItem(STORAGE_KEY_AUTH_REMEMBER);
+            showLoginView();
+        }
+
+        function togglePasswordVisibility(inputId, iconId) {
+            const input = document.getElementById(inputId);
+            const icon = document.getElementById(iconId);
+            if (!input) return;
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.innerText = '🙈';
+            } else {
+                input.type = 'password';
+                icon.innerText = '👁️';
+            }
+        }
+
+        // CapsLock Detection
+        document.addEventListener('keydown', function(e) {
+            const capsWarning = document.getElementById('capsLockWarning');
+            if (capsWarning && e.getModifierState) {
+                if (e.getModifierState('CapsLock')) {
+                    capsWarning.classList.remove('hidden
