@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Rev012 -->
+    <title>Crane Failure History Analyzer Rev012</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Offline/Local Backup Data (works on file:// protocol without CORS) -->
+    <script src="data/backup_data.js"></script>
+    <style>
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .pivot-cell { cursor: pointer; transition: all 0.15s ease-in-out; }
+        .pivot-cell:hover { background-color: #dbeafe !important; transform: scale(1.02); font-weight: bold; color: #1d4ed8; }
+        .sortable-header { cursor: pointer; user-select: none; transition: background-color 0.15s; }
+        .sortable-header:hover { background-color: #cbd5e1; }
+        .detail-sortable { cursor: pointer; user-select: none; transition: background-color 0.15s; }
+        .detail-sortable:hover { background-color: #e2e8f0; }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-6px); }
+            40%, 80% { transform: translateX(6px); }
+        }
+        .shake {
+            animation: shake 0.35s ease-in-out;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen antialiased">
+
+    <!-- ========================================== -->
+    <!-- 1. Login View (Initial Lock Screen) -->
+    <!-- ========================================== -->
+    <div id="loginView" class="fixed inset-0 z-50 flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 p-4 transition-opacity duration-300">
+        <div class="relative w-full max-w-md bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 sm:p-10 overflow-hidden">
+            <!-- Top Deco Bar -->
+            <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-600 via-indigo-500 to-blue-400"></div>
+
+            <!-- Logo and System Title -->
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 text-3xl mb-4 shadow-inner">
+                    🏗️
+                </div>
+                <h1 class="text-2xl font-black text-slate-800 tracking-tight">
+                    Crane Failure History Analyzer
+                </h1>
+                <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider mt-1">
+                    CRANE FAILURE HISTORY ANALYZER Rev012
+                </p>
+                <p class="text-xs text-slate-500 mt-2">
+                    Please enter the administrator password to access the system.
+                </p>
+            </div>
+
+            <!-- Login Form -->
+            <form id="loginForm" onsubmit="handleLogin(event)" class="space-y-5">
+                <div>
+                    <label for="loginPassword" class="block text-xs font-bold text-slate-700 mb-2">
+                        Password
+                    </label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                            <!-- Lock Icon -->
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                            </svg>
+                        </div>
+                        <input
+                            type="password"
+                            id="loginPassword"
+                            autocomplete="current-password"
+                            placeholder="Enter your password"
+                            class="w-full pl-10 pr-11 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all shadow-sm"
+                            required
+                        />
+                        <button
+                            type="button"
+                            onclick="togglePasswordVisibility('loginPassword', 'eyeIconLogin')"
+                            class="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-600 focus:outline-none"
+                            tabindex="-1"
+                            title="Show/Hide Password"
+                        >
+                            <span id="eyeIconLogin">👁️</span>
+                        </button>
+                    </div>
+                    <div id="capsLockWarning" class="hidden text-[11px] text-amber-600 mt-1 font-medium flex items-center gap-1">
+                        ⚠️ Caps Lock is ON.
+                    </div>
+                </div>
+
+                <!-- Error Alert -->
+                <div id="loginErrorMsg" class="hidden text-xs bg-rose-50 border border-rose-200 text-rose-700 px-3.5 py-2.5 rounded-xl font-medium flex items-center gap-2">
+                    <span>❌</span>
+                    <span id="loginErrorText">Incorrect password.</span>
+                </div>
+
+                <!-- Remember Me Option -->
+                <div class="flex items-center justify-between text-xs">
+                    <label class="inline-flex items-center gap-2 cursor-pointer text-slate-600">
+                        <input type="checkbox" id="rememberMeCheckbox" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
+                        <span>Keep me logged in (30 days)</span>
+                    </label>
+                </div>
+
+                <!-- Login Button -->
+                <button
+                    type="submit"
+                    class="w-full py-3.5 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold rounded-xl text-sm shadow-md hover:shadow-lg transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 flex items-center justify-center gap-2"
+                >
+                    <span>Login</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
+            </form>
+
+            <!-- Password Recovery Footer -->
+            <div class="mt-6 pt-5 border-t border-slate-100 text-center">
+                <button
+                    type="button"
+                    onclick="resetPasswordFromLogin()"
+                    class="text-xs text-slate-400 hover:text-slate-600 underline transition-colors cursor-pointer"
+                >
+                    Forgot password? (Reset to default)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 2. Main Dashboard (Visible after login) -->
+    <!-- ========================================== -->
+    <div id="dashboardView" class="hidden max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        
+        <!-- Header -->
+        <header class="mb-6 pb-4 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h1 class="text-2xl sm:text-3xl font-extrabold text-blue-700 flex items-center gap-2">
+                    🏗️ Crane Failure History Analyzer Rev012
+                </h1>
+                <p class="text-sm text-slate-500 mt-1">
+                    Select a Terminal BU to load the latest data and start pivot analysis.
+                </p>
+            </div>
+            
+            <!-- Top Right: Status Badge & Auth Actions -->
+            <div class="flex flex-wrap items-center gap-2">
+                <!-- Sync Status Badge -->
+                <div id="syncStatus" class="text-xs bg-slate-100 text-slate-600 border border-slate-200 px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm">
+                    ☁️ Standby
+                </div>
+
+                <!-- Change Password Button -->
+                <button
+                    onclick="openChangePasswordModal()"
+                    class="text-xs bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
+                    title="Change Password"
+                >
+                    <span>🔑 Password</span>
+                </button>
+
+                <!-- Logout Button -->
+                <button
+                    onclick="handleLogout()"
+                    class="text-xs bg-rose-50 border border-rose-200 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-xl font-semibold shadow-sm flex items-center gap-1.5 transition-colors"
+                    title="Logout"
+                >
+                    <span>🔒 Logout</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Pivot Options Panel -->
+        <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 mb-6 space-y-6">
+            
+            <!-- BU Selection & Local File Upload Section -->
+            <div class="border-b border-slate-100 pb-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <h2 class="text-base font-bold text-slate-700 flex items-center gap-2">
+                        🛠️ 1. Select Terminal BU
+                    </h2>
+                    <!-- Direct CSV Upload Option -->
+                    <label class="text-xs font-semibold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors">
+                        <span>📁 Open Local CSV File</span>
+                        <input type="file" id="localFileInput" accept=".csv" onchange="handleLocalFileUpload(event)" class="hidden">
+                    </label>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="sm:col-span-1">
+                        <select id="buSelect" onchange="loadCSVByBU()" class="w-full bg-blue-50 border border-blue-300 text-blue-900 rounded-lg p-3 text-sm font-bold shadow-sm focus:ring-2 focus:ring-blue-500 focus:outline-none transition-colors cursor-pointer">
+                            <option value="">-- Select BU --</option>
+                            <option value="BNCT">BNCT</option>
+                            <option value="LCIT">LCIT</option>
+                            <option value="SBCP">SBCP</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2 flex items-center">
+                        <span id="activeFileInfo" class="text-xs text-slate-500 font-medium">
+                            Selected Data: None (Select a BU or open a local CSV file)
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dual Filter Section -->
+            <div class="border-b border-slate-100 pb-6">
+                <h2 class="text-base font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    🔍 2. Data Filtering (Multi-condition)
+                </h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    
+                    <!-- Filter 1 -->
+                    <div class="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1.5">Filter Criteria 1</label>
+                            <select id="filterFieldSelect1" onchange="updateFilterCheckboxes(1)" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">-- Data load required --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center text-xs font-semibold text-slate-600 mb-1.5">
+                                <span id="filter1Counter">Select Conditions (Checkbox)</span>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="toggleAllFilters(1, true)" class="text-[10px] text-blue-600 hover:underline">Select All</button>
+                                    <span class="text-slate-300">|</span>
+                                    <button onclick="toggleAllFilters(1, false)" class="text-[10px] text-red-600 hover:underline">Deselect All</button>
+                                </div>
+                            </div>
+                            <!-- Filter Search Input -->
+                            <div class="mb-2">
+                                <input
+                                    type="text"
+                                    id="filter1Search"
+                                    placeholder="Search items..."
+                                    oninput="filterCheckboxItems(1)"
+                                    class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div id="filterCheckboxContainer1" class="border border-slate-300 rounded-lg bg-white p-2.5 h-32 overflow-y-auto custom-scrollbar flex flex-wrap gap-2 content-start">
+                                <span class="text-xs text-slate-400 p-1">Items will appear after selecting a BU.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filter 2 -->
+                    <div class="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-bold text-slate-700 mb-1.5">Filter Criteria 2</label>
+                            <select id="filterFieldSelect2" onchange="updateFilterCheckboxes(2)" class="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                                <option value="">-- Data load required --</option>
+                            </select>
+                        </div>
+                        <div>
+                            <div class="flex justify-between items-center text-xs font-semibold text-slate-600 mb-1.5">
+                                <span id="filter2Counter">Select Conditions (Checkbox)</span>
+                                <div class="flex items-center gap-2">
+                                    <button onclick="toggleAllFilters(2, true)" class="text-[10px] text-blue-600 hover:underline">Select All</button>
+                                    <span class="text-slate-300">|</span>
+                                    <button onclick="toggleAllFilters(2, false)" class="text-[10px] text-red-600 hover:underline">Deselect All</button>
+                                </div>
+                            </div>
+                            <!-- Filter Search Input -->
+                            <div class="mb-2">
+                                <input
+                                    type="text"
+                                    id="filter2Search"
+                                    placeholder="Search items..."
+                                    oninput="filterCheckboxItems(2)"
+                                    class="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                            </div>
+                            <div id="filterCheckboxContainer2" class="border border-slate-300 rounded-lg bg-white p-2.5 h-32 overflow-y-auto custom-scrollbar flex flex-wrap gap-2 content-start">
+                                <span class="text-xs text-slate-400 p-1">Items will appear after selecting a BU.</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Pivot Table Axis Configuration -->
+            <div>
+                <h2 class="text-base font-bold text-slate-700 mb-4 flex items-center gap-2">
+                    ⚙️ 3. Table Configuration
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Row Field (Horizontal Axis)</label>
+                        <select id="rowFieldSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Column Field (Vertical Axis)</label>
+                        <select id="colFieldSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">-- Select (Optional) --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Target Value Field</label>
+                        <select id="valFieldSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="">-- Select --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-600 mb-1.5">Aggregation Type</label>
+                        <select id="aggTypeSelect" onchange="resetPivotSortAndGenerate()" class="w-full bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm font-semibold text-blue-700 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+                            <option value="COUNT">Count</option>
+                            <option value="SUM">Sum</option>
+                            <option value="AVERAGE">Average</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pivot Table Results Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-6">
+            <div class="p-4 bg-slate-100 border-b border-slate-200 flex flex-wrap justify-between items-center gap-2">
+                <div class="flex items-center gap-2">
+                    <span class="font-bold text-slate-800 text-sm">
+                        📊 Query Results <span class="text-xs font-normal text-slate-500 ml-2">(Click values to view details, click headers to sort)</span>
+                    </span>
+                    <span id="pivotSummaryBadge" class="text-xs px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full font-medium hidden"></span>
+                </div>
+                <button onclick="downloadPivotAsCSV()" class="text-xs bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 transition-colors">
+                    <span>📥 Download Pivot CSV</span>
+                </button>
+            </div>
+            <div class="overflow-x-auto max-h-[460px] overflow-y-auto custom-scrollbar">
+                <table id="pivotTable" class="w-full text-xs text-left border-collapse">
+                    <thead id="pivotHead" class="bg-slate-50 text-slate-700 font-semibold sticky top-0 z-10 border-b border-slate-300 shadow-sm">
+                        <tr>
+                            <th class="p-4 text-center text-slate-400 font-normal">The pivot table will be generated automatically after selecting a BU.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pivotBody" class="divide-y divide-slate-100 font-mono">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Detail Data View Section -->
+        <div id="detailsSection" class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden hidden">
+            
+            <div class="p-4 bg-indigo-50 border-b border-indigo-100 flex flex-wrap justify-between items-center gap-2">
+                <span id="detailsTitle" class="font-bold text-indigo-900 text-sm">🔍 Detail Data View</span>
+                <div class="flex items-center gap-2">
+                    <button onclick="downloadDetailsAsCSV()" class="text-xs bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 font-medium px-2.5 py-1 rounded-md shadow-sm transition-colors">
+                        Download Details CSV
+                    </button>
+                    <button onclick="document.getElementById('detailsSection').classList.add('hidden')" class="text-xs bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-2 py-1 rounded-md">
+                        Close ✖
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Detail Field Selection Menu -->
+            <div class="p-3 bg-white border-b border-slate-200 flex flex-col gap-2">
+                <div class="flex justify-between items-center text-xs font-bold text-green-700">
+                    <span>✅ Select Fields to Display</span>
+                    <div class="flex gap-2">
+                        <button onclick="toggleAllDetailFields(true)" class="text-[10px] text-blue-600 hover:underline">Select All</button>
+                        <span class="text-slate-300">|</span>
+                        <button onclick="toggleAllDetailFields(false)" class="text-[10px] text-red-600 hover:underline">Deselect All</button>
+                    </div>
+                </div>
+                <div id="detailFieldCheckboxContainer" class="flex flex-wrap gap-2 content-start max-h-24 overflow-y-auto custom-scrollbar"></div>
+            </div>
+
+            <!-- Detail Table Area -->
+            <div class="overflow-x-auto max-h-[500px] overflow-y-auto custom-scrollbar">
+                <table class="w-full text-xs text-left border-collapse whitespace-nowrap">
+                    <thead id="detailsHead" class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200 shadow-sm sticky top-0 z-10">
+                    </thead>
+                    <tbody id="detailsBody" class="divide-y divide-slate-100">
+                    </tbody>
+                </table>
+            </div>
+            
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 3. Change Password Modal Popup -->
+    <!-- ========================================== -->
+    <div id="changePasswordModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 hidden">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-sm w-full p-6 space-y-4">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    🔑 Change Password
+                </h3>
+                <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-slate-600 text-sm">✖</button>
+            </div>
+
+            <form onsubmit="handleSaveNewPassword(event)" class="space-y-3">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Current Password</label>
+                    <input
+                        type="password"
+                        id="currentPwInput"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="Enter current password"
+                        required
+                    />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">New Password</label>
+                    <input
+                        type="password"
+                        id="newPwInput"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="Enter new password"
+                        required
+                    />
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Confirm New Password</label>
+                    <input
+                        type="password"
+                        id="confirmNewPwInput"
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                        placeholder="Re-enter new password"
+                        required
+                    />
+                </div>
+
+                <div id="changePwMsg" class="hidden text-xs py-1.5 font-medium"></div>
+
+                <div class="flex items-center justify-between pt-2">
+                    <button
+                        type="button"
+                        onclick="resetPasswordToDefault()"
+                        class="text-xs text-slate-500 hover:text-rose-600 underline"
+                        title="Reset to default password"
+                    >
+                        Reset to default
+                    </button>
+                    <div class="flex gap-2">
+                        <button
+                            type="button"
+                            onclick="closeChangePasswordModal()"
+                            class="px-3 py-1.5 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg font-medium"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            class="px-3.5 py-1.5 text-xs text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-bold shadow-sm"
+                        >
+                            Save Changes
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 4. Scripts -->
+    <!-- ========================================== -->
+    <script>
+        // Default password and storage keys
+        const DEFAULT_PASSWORD = "admin121";
+        const STORAGE_KEY_CUSTOM_PW = "crane_app_custom_password";
+        const STORAGE_KEY_AUTH_SESSION = "crane_app_auth_session";
+        const STORAGE_KEY_AUTH_REMEMBER = "crane_app_auth_remember";
+
+        // Repository connection info
+        const GITHUB_OWNER = "42korean";
+        const GITHUB_REPO = "seafailures";
+
+        // Offline / Local backup file mapping for GitHub API fallback
+        const LOCAL_FALLBACK_FILES = {
+            "BNCT": "data/BNCT_20261116_152227.csv",
+            "LCIT": "data/LCIT_20261116_152227.csv",
+            "SBCP": "data/SBCP_20261116_152227.csv"
+        };
+
+        let currentDataRows = []; 
+        let currentFields = [];
+        let selectedDetailFields = [];
+        let filteredRowsCache = [];
+        let matrixDataRows = {}; 
+        
+        let pivotSortCol = ''; 
+        let pivotSortAsc = false; 
+
+        let currentDetailRows = [];
+        let currentSortField = '';
+        let currentSortAsc = true;
+
+        // ----------------------------------------
+        // 1. Authentication & Login Logic
+        // ----------------------------------------
+        function getEffectivePassword() {
+            return localStorage.getItem(STORAGE_KEY_CUSTOM_PW) || DEFAULT_PASSWORD;
+        }
+
+        function isUserAuthenticated() {
+            return sessionStorage.getItem(STORAGE_KEY_AUTH_SESSION) === "true" ||
+                   localStorage.getItem(STORAGE_KEY_AUTH_REMEMBER) === "true";
+        }
+
+        function checkAuthStatusOnLoad() {
+            if (isUserAuthenticated()) {
+                showDashboard();
+            } else {
+                showLoginView();
+            }
+        }
+
+        function showDashboard() {
+            const loginView = document.getElementById('loginView');
+            const dashboardView = document.getElementById('dashboardView');
+            loginView.classList.add('hidden');
+            dashboardView.classList.remove('hidden');
+        }
+
+        function showLoginView() {
+            const loginView = document.getElementById('loginView');
+            const dashboardView = document.getElementById('dashboardView');
+            dashboardView.classList.add('hidden');
+            loginView.classList.remove('hidden');
+            
+            const pwInput = document.getElementById('loginPassword');
+            if (pwInput) {
+                pwInput.value = '';
+                setTimeout(() => pwInput.focus(), 100);
+            }
+            hideLoginError();
+        }
+
+        function handleLogin(event) {
+            event.preventDefault();
+            const inputPw = document.getElementById('loginPassword').value.trim();
+            const rememberMe = document.getElementById('rememberMeCheckbox').checked;
+            const expectedPw = getEffectivePassword();
+
+            if (inputPw === expectedPw) {
+                // Login success
+                sessionStorage.setItem(STORAGE_KEY_AUTH_SESSION, "true");
+                if (rememberMe) {
+                    localStorage.setItem(STORAGE_KEY_AUTH_REMEMBER, "true");
+                } else {
+                    localStorage.removeItem(STORAGE_KEY_AUTH_REMEMBER);
+                }
+                hideLoginError();
+                showDashboard();
+            } else {
+                // Login failed: shake animation & error display
+                showLoginError("Incorrect password. Please try again.");
+                const card = document.querySelector('#loginView > div');
+                card.classList.remove('shake');
+                void card.offsetWidth; // Trigger reflow
+                card.classList.add('shake');
+                const pwInput = document.getElementById('loginPassword');
+                pwInput.select();
+            }
+        }
+
+        function showLoginError(msg) {
+            const errBox = document.getElementById('loginErrorMsg');
+            const errText = document.getElementById('loginErrorText');
+            errText.innerText = msg;
+            errBox.classList.remove('hidden');
+        }
+
+        function hideLoginError() {
+            const errBox = document.getElementById('loginErrorMsg');
+            if (errBox) errBox.classList.add('hidden');
+        }
+
+        function handleLogout() {
+            if (!confirm('Are you sure you want to logout?')) return;
+            sessionStorage.removeItem(STORAGE_KEY_AUTH_SESSION);
+            localStorage.removeItem(STORAGE_KEY_AUTH_REMEMBER);
+            showLoginView();
+        }
+
+        function togglePasswordVisibility(inputId, iconId) {
+            const input = document.getElementById(inputId);
+            const icon = document.getElementById(iconId);
+            if (!input) return;
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.innerText = '🙈';
+            } else {
+                input.type = 'password';
+                icon.innerText = '👁️';
+            }
+        }
+
+        // CapsLock detection
+        document.addEventListener('keydown', function(e) {
+            const capsWarning = document.getElementById('capsLockWarning');
+            if (capsWarning && e.getModifierState) {
+                if (e.getModifierState('CapsLock')) {
+                    capsWarning.classList.remove('hidden');
+                } else {
+                    capsWarning.classList.add('hidden');
+                }
+            }
+        });
+
+        // ----------------------------------------
+        // 2. Password Change Modal Logic
+        // ----------------------------------------
+        function openChangePasswordModal() {
+            const modal = document.getElementById('changePasswordModal');
+            document.getElementById('currentPwInput').value = '';
+            document.getElementById('newPwInput').value = '';
+            document.getElementById('confirmNewPwInput').value = '';
+            const msg = document.getElementById('changePwMsg');
+            msg.className = 'hidden';
+            modal.classList.remove('hidden');
+            setTimeout(() => document.getElementById('currentPwInput').focus(), 100);
+        }
+
+        function closeChangePasswordModal() {
+            document.getElementById('changePasswordModal').classList.add('hidden');
+        }
+
+        function handleSaveNewPassword(e) {
+            e.preventDefault();
+            const currentPw = document.getElementById('currentPwInput').value.trim();
+            const newPw = document.getElementById('newPwInput').value.trim();
+            const confirmNewPw = document.getElementById('confirmNewPwInput').value.trim();
+            const msg = document.getElementById('changePwMsg');
+
+            if (currentPw !== getEffectivePassword()) {
+                msg.innerText = '❌ Incorrect current password.';
+                msg.className = 'text-xs py-1.5 font-medium text-rose-600 block';
+                return;
+            }
+
+            if (!newPw) {
+                msg.innerText = '❌ Please enter a new password.';
+                msg.className = 'text-xs py-1.5 font-medium text-rose-600 block';
+                return;
+            }
+
+            if (newPw !== confirmNewPw) {
+                msg.innerText = '❌ New password and confirmation do not match.';
+                msg.className = 'text-xs py-1.5 font-medium text-rose-600 block';
+                return;
+            }
+
+            localStorage.setItem(STORAGE_KEY_CUSTOM_PW, newPw);
+            alert('Password has been successfully changed!');
+            closeChangePasswordModal();
+        }
+
+        function resetPasswordToDefault() {
+            if (confirm('Are you sure you want to reset the password to the default setting?')) {
+                localStorage.removeItem(STORAGE_KEY_CUSTOM_PW);
+                alert('Password has been reset to the default setting.');
+                closeChangePasswordModal();
+            }
+        }
+
+        function resetPasswordFromLogin() {
+            if (confirm('Are you sure you want to reset the password to the default setting?')) {
+                localStorage.removeItem(STORAGE_KEY_CUSTOM_PW);
+                alert('Password has been reset to the default setting.\nPlease log in with the default password.');
+                const pwInput = document.getElementById('loginPassword');
+                if (pwInput) {
+                    pwInput.value = '';
+                    pwInput.focus();
+                }
+                hideLoginError();
+            }
+        }
+
+        // ----------------------------------------
+        // 3. Data Loading & Sync Logic
+        // ----------------------------------------
+        function setSyncStatus(status, isError=false, isSuccess=false) {
+            const badge = document.getElementById('syncStatus');
+            badge.innerHTML = status;
+            if (isError) {
+                badge.className = "text-xs bg-rose-50 text-rose-700 border border-rose-200 px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm";
+            } else if (isSuccess) {
+                badge.className = "text-xs bg-emerald-50 text-emerald-700 border border-emerald-200 px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm";
+            } else {
+                badge.className = "text-xs bg-blue-50 text-blue-700 border border-blue-200 px-3.5 py-2 rounded-xl font-bold flex items-center gap-2 shadow-sm animate-pulse";
+            }
+        }
+
+        async function loadCSVByBU() {
+            const bu = document.getElementById('buSelect').value;
+            if (!bu) {
+                document.getElementById('activeFileInfo').innerText = 'Selected Data: None';
+                return;
+            }
+
+            setSyncStatus(`🔄 Searching for latest ${bu} file...`);
+            document.getElementById('activeFileInfo').innerText = `Preparing to download ${bu} data...`;
+            
+            try {
+                let csvText = null;
+                let loadedFileName = '';
+
+                // Step 1: Try GitHub Contents API
+                try {
+                    const apiURL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/`;
+                    const response = await fetch(apiURL);
+                    if (response.ok) {
+                        const files = await response.json();
+                        const targetFiles = files.filter(f => f.name.startsWith(bu) && f.name.toLowerCase().endsWith('.csv'));
+                        
+                        if (targetFiles.length > 0) {
+                            targetFiles.sort((a, b) => b.name.localeCompare(a.name));
+                            const latestFile = targetFiles[0];
+                            loadedFileName = latestFile.name;
+                            setSyncStatus(`📥 Downloading [${latestFile.name}]...`);
+
+                            const rawResponse = await fetch(latestFile.download_url);
+                            if (rawResponse.ok) {
+                                csvText = await rawResponse.text();
+                            }
+                        }
+                    }
+                } catch (apiErr) {
+                    console.warn("GitHub API fetch failed, attempting fallback:", apiErr);
+                }
+
+                // Step 2: Fallback to built-in backup (window.BACKUP_CSV_DATA) or local file
+                if (!csvText && window.BACKUP_CSV_DATA && window.BACKUP_CSV_DATA[bu]) {
+                    csvText = window.BACKUP_CSV_DATA[bu].content;
+                    loadedFileName = window.BACKUP_CSV_DATA[bu].filename + ' (Built-in Backup)';
+                }
+
+                if (!csvText) {
+                    const fallbackPath = LOCAL_FALLBACK_FILES[bu];
+                    if (fallbackPath) {
+                        setSyncStatus(`📥 Loading local backup [${bu}]...`);
+                        try {
+                            const localResp = await fetch(fallbackPath);
+                            if (localResp.ok) {
+                                csvText = await localResp.text();
+                                loadedFileName = fallbackPath.split('/').pop() + ' (Local Backup)';
+                            }
+                        } catch (e) {
+                            console.warn("Local fetch failed:", e);
+                        }
+                    }
+                }
+
+                if (!csvText) {
+                    throw new Error(`Unable to retrieve CSV data for ${bu}.`);
+                }
+
+                parseCSVToData(csvText);
+                
+                setSyncStatus(`✅ [${loadedFileName}] Loaded! (${currentDataRows.length.toLocaleString()} rows)`, false, true);
+                document.getElementById('activeFileInfo').innerText = `📄 Current Data: ${loadedFileName} (Total ${currentDataRows.length.toLocaleString()} rows)`;
+                
+                // Initialize pivot configuration
+                initializePivotConfig();
+
+            } catch (error) {
+                console.error(error);
+                setSyncStatus(`❌ Error: ${error.message}`, true);
+                document.getElementById('activeFileInfo').innerText = `❌ Error: ${error.message}`;
+            }
+        }
+
+        // Local file direct upload handler
+        function handleLocalFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            setSyncStatus(`📂 Reading [${file.name}]...`);
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const csvText = e.target.result;
+                parseCSVToData(csvText);
+                setSyncStatus(`✅ [${file.name}] Loaded! (${currentDataRows.length.toLocaleString()} rows)`, false, true);
+                document.getElementById('activeFileInfo').innerText = `📄 Local Upload: ${file.name} (${currentDataRows.length.toLocaleString()} rows)`;
+                document.getElementById('buSelect').value = '';
+                initializePivotConfig();
+            };
+            reader.onerror = function() {
+                setSyncStatus(`❌ Failed to read file`, true);
+            };
+            reader.readAsText(file, 'UTF-8');
+        }
+
+        // ----------------------------------------
+        // 4. CSV Parsing & Pivot Initialization
+        // ----------------------------------------
+        function parseCSVToData(csvText) {
+            const lines = csvText.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim().length > 0);
+            if (lines.length < 2) return;
+
+            const headers = parseCSVLine(lines[0]).map(h => h.trim());
+            currentFields = headers;
+
+            currentDataRows = [];
+            for (let i = 1; i < lines.length; i++) {
+                const cols = parseCSVLine(lines[i]);
+                const rowObj = {};
+                
+                headers.forEach((header, idx) => {
+                    let val = cols[idx] !== undefined ? cols[idx].trim() : '';
+                    if (val !== '' && !isNaN(val) && !isNaN(parseFloat(val))) {
+                        rowObj[header] = parseFloat(val);
+                    } else {
+                        rowObj[header] = val;
+                    }
+                });
+                currentDataRows.push(rowObj);
+            }
+            
+            selectedDetailFields = [...currentFields];
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let cur = '';
+            let inQuotes = false;
+            for (let i = 0; i < line.length; i++) {
+                const c = line[i];
+                if (c === '"') {
+                    if (inQuotes && line[i + 1] === '"') {
+                        cur += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (c === ',' && !inQuotes) {
+                    result.push(cur);
+                    cur = '';
+                } else {
+                    cur += c;
+                }
+            }
+            result.push(cur);
+            return result;
+        }
+
+        function initializePivotConfig() {
+            populateFieldDropdowns(currentFields);
+            
+            // Default mappings
+            const defaultFilter1 = 'Cat(Lv2)';
+            const defaultFilter2 = 'EQ.Group';
+            const defaultCol = 'Sub-cat(Lv3)';
+            const defaultVal = 'Sub-cat(Lv3)';
+            
+            const rowCandidate = currentFields.find(f => f.toLowerCase().includes('week') || f.includes('주차') || f.includes('주치')) || currentFields[1] || currentFields[0];
+            
+            const finalFilter1 = currentFields.includes(defaultFilter1) ? defaultFilter1 : currentFields[0];
+            const finalFilter2 = currentFields.includes(defaultFilter2) ? defaultFilter2 : (currentFields.length > 1 ? currentFields[1] : '');
+            const finalCol = currentFields.includes(defaultCol) ? defaultCol : '';
+            const finalVal = currentFields.includes(defaultVal) ? defaultVal : currentFields[0];
+
+            setSelectValue('filterFieldSelect1', finalFilter1);
+            setSelectValue('filterFieldSelect2', finalFilter2);
+            setSelectValue('rowFieldSelect', rowCandidate);
+            setSelectValue('colFieldSelect', finalCol);
+            setSelectValue('valFieldSelect', finalVal);
+            setSelectValue('aggTypeSelect', 'COUNT');
+
+            // Reset search inputs
+            document.getElementById('filter1Search').value = '';
+            document.getElementById('filter2Search').value = '';
+
+            // Initial checkbox render & filtering
+            updateFilterCheckboxes(1);
+            updateFilterCheckboxes(2);
+        }
+
+        function populateFieldDropdowns(fields) {
+            const filterSel1 = document.getElementById('filterFieldSelect1');
+            const filterSel2 = document.getElementById('filterFieldSelect2');
+            const rowSel = document.getElementById('rowFieldSelect');
+            const colSel = document.getElementById('colFieldSelect');
+            const valSel = document.getElementById('valFieldSelect');
+
+            filterSel1.innerHTML = '<option value="">-- Select Field --</option>';
+            filterSel2.innerHTML = '<option value="">-- Select Field (Optional) --</option>';
+            rowSel.innerHTML = '<option value="">-- Select --</option>';
+            colSel.innerHTML = '<option value="">-- (No Vertical Axis) --</option>';
+            valSel.innerHTML = '<option value="">-- Select --</option>';
+
+            fields.forEach(f => {
+                filterSel1.appendChild(new Option(f, f));
+                filterSel2.appendChild(new Option(f, f));
+                rowSel.appendChild(new Option(f, f));
+                colSel.appendChild(new Option(f, f));
+                valSel.appendChild(new Option(f, f));
+            });
+        }
+
+        function setSelectValue(id, val) {
+            const el = document.getElementById(id);
+            if ([...el.options].some(o => o.value === val)) el.value = val;
+        }
+
+        // ----------------------------------------
+        // 5. Filter & Checkbox Search Functionality
+        // ----------------------------------------
+        function updateFilterCheckboxes(filterNum) {
+            const filterField = document.getElementById(`filterFieldSelect${filterNum}`).value;
+            const container = document.getElementById(`filterCheckboxContainer${filterNum}`);
+            const counter = document.getElementById(`filter${filterNum}Counter`);
+            const searchInput = document.getElementById(`filter${filterNum}Search`);
+            if (searchInput) searchInput.value = '';
+            
+            if (!filterField || currentDataRows.length === 0) {
+                container.innerHTML = '<span class="text-xs text-slate-400 p-1">Please select a field.</span>';
+                if (counter) counter.innerText = 'Select Conditions (Checkbox)';
+                resetPivotSortAndGenerate();
+                return;
+            }
+
+            const uniqueValues = new Set();
+            currentDataRows.forEach(row => {
+                const val = (row[filterField] !== undefined && row[filterField] !== '') ? row[filterField] : '(Empty)';
+                uniqueValues.add(String(val));
+            });
+
+            const sortedValues = [...uniqueValues].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            container.innerHTML = '';
+            sortedValues.forEach(val => {
+                const safeVal = val.replace(/"/g, '&quot;');
+                const label = document.createElement('label');
+                label.className = "filter-item inline-flex items-center gap-1.5 bg-white border border-slate-200 px-2.5 py-1 rounded-md cursor-pointer hover:bg-blue-50 transition-colors shadow-2xs";
+                label.setAttribute('data-val', val.toLowerCase());
+                label.innerHTML = `
+                    <input type="checkbox" value="${safeVal}" checked onchange="handleCheckboxChange(${filterNum})" class="w-3 h-3 text-blue-600 rounded border-slate-300 focus:ring-blue-500 cursor-pointer">
+                    <span class="text-[11px] font-medium text-slate-700 select-none">${val}</span>
+                `;
+                container.appendChild(label);
+            });
+
+            updateFilterCounter(filterNum);
+            resetPivotSortAndGenerate();
+        }
+
+        function handleCheckboxChange(filterNum) {
+            updateFilterCounter(filterNum);
+            applyFiltersAndGeneratePivot();
+        }
+
+        function updateFilterCounter(filterNum) {
+            const container = document.getElementById(`filterCheckboxContainer${filterNum}`);
+            const counter = document.getElementById(`filter${filterNum}Counter`);
+            if (!container || !counter) return;
+            const allCheckboxes = container.querySelectorAll('input[type="checkbox"]');
+            const checkedBoxes = container.querySelectorAll('input[type="checkbox"]:checked');
+            counter.innerText = `Conditions (${checkedBoxes.length}/${allCheckboxes.length} selected)`;
+        }
+
+        function toggleAllFilters(filterNum, check) {
+            const container = document.getElementById(`filterCheckboxContainer${filterNum}`);
+            container.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = check);
+            updateFilterCounter(filterNum);
+            applyFiltersAndGeneratePivot();
+        }
+
+        function filterCheckboxItems(filterNum) {
+            const searchInput = document.getElementById(`filter${filterNum}Search`);
+            const term = searchInput.value.toLowerCase().trim();
+            const container = document.getElementById(`filterCheckboxContainer${filterNum}`);
+            const items = container.querySelectorAll('.filter-item');
+            items.forEach(item => {
+                const val = item.getAttribute('data-val') || '';
+                if (!term || val.includes(term)) {
+                    item.classList.remove('hidden');
+                } else {
+                    item.classList.add('hidden');
+                }
+            });
+        }
+
+        // ----------------------------------------
+        // 6. Dual Filter Apply & Pivot Generation
+        // ----------------------------------------
+        function applyFiltersAndGeneratePivot() {
+            const field1 = document.getElementById('filterFieldSelect1').value;
+            const field2 = document.getElementById('filterFieldSelect2').value;
+            
+            let targetData = currentDataRows;
+
+            // Apply Filter 1
+            if (field1) {
+                const container1 = document.getElementById('filterCheckboxContainer1');
+                const checkedBoxes1 = Array.from(container1.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+                targetData = targetData.filter(row => {
+                    const val = String(row[field1] !== undefined && row[field1] !== '' ? row[field1] : '(Empty)');
+                    return checkedBoxes1.includes(val);
+                });
+            }
+
+            // Apply Filter 2
+            if (field2) {
+                const container2 = document.getElementById('filterCheckboxContainer2');
+                const checkedBoxes2 = Array.from(container2.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+                targetData = targetData.filter(row => {
+                    const val = String(row[field2] !== undefined && row[field2] !== '' ? row[field2] : '(Empty)');
+                    return checkedBoxes2.includes(val);
+                });
+            }
+            
+            filteredRowsCache = targetData;
+            generatePivotTable();
+            document.getElementById('detailsSection').classList.add('hidden');
+        }
+
+        function resetPivotSortAndGenerate() {
+            pivotSortCol = '';
+            pivotSortAsc = false;
+            applyFiltersAndGeneratePivot();
+        }
+
+        function sortPivotTable(colKey) {
+            if (pivotSortCol === colKey) {
+                pivotSortAsc = !pivotSortAsc;
+            } else {
+                pivotSortCol = colKey;
+                pivotSortAsc = false;
+            }
+            generatePivotTable();
+        }
+
+        function generatePivotTable() {
+            const rowField = document.getElementById('rowFieldSelect').value;
+            const colField = document.getElementById('colFieldSelect').value;
+            const valField = document.getElementById('valFieldSelect').value;
+            const aggType = document.getElementById('aggTypeSelect').value;
+
+            const tableHead = document.getElementById('pivotHead');
+            const tableBody = document.getElementById('pivotBody');
+            const badge = document.getElementById('pivotSummaryBadge');
+
+            if (!rowField || !valField) {
+                tableHead.innerHTML = `<tr><th class="p-4 text-center text-slate-400 font-normal">Please select Row and Value fields.</th></tr>`;
+                tableBody.innerHTML = '';
+                badge.classList.add('hidden');
+                return;
+            }
+            if (filteredRowsCache.length === 0) {
+                tableHead.innerHTML = `<tr><th class="p-4 text-center text-slate-400 font-normal">No data matches the selected criteria. Please check your filters.</th></tr>`;
+                tableBody.innerHTML = '';
+                badge.classList.add('hidden');
+                return;
+            }
+
+            const rowKeysSet = new Set();
+            const colKeysSet = new Set();
+            matrixDataRows = {};
+
+            filteredRowsCache.forEach(row => {
+                rowKeysSet.add(String(row[rowField] !== undefined && row[rowField] !== '' ? row[rowField] : '(Empty)'));
+                if (colField) colKeysSet.add(String(row[colField] !== undefined && row[colField] !== '' ? row[colField] : '(Empty)'));
+            });
+
+            let rowKeys = [...rowKeysSet].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            const colKeys = colField ? [...colKeysSet].sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) : ['Value'];
+
+            const matrix = {};
+            const rowTotalCache = {}; 
+
+            rowKeys.forEach(r => {
+                matrix[r] = {}; 
+                rowTotalCache[r] = []; 
+                matrixDataRows[r] = {}; 
+                matrixDataRows[r]['__ROW_TOTAL__'] = []; 
+                colKeys.forEach(c => { 
+                    matrix[r][c] = []; 
+                    matrixDataRows[r][c] = []; 
+                });
+            });
+            matrixDataRows['__COL_TOTAL__'] = {};
+            colKeys.forEach(c => { matrixDataRows['__COL_TOTAL__'][c] = []; });
+            matrixDataRows['__GRAND_TOTAL__'] = [];
+
+            filteredRowsCache.forEach(row => {
+                const rVal = String(row[rowField] !== undefined && row[rowField] !== '' ? row[rowField] : '(Empty)');
+                const cVal = colField ? String(row[colField] !== undefined && row[colField] !== '' ? row[colField] : '(Empty)') : 'Value';
+                let rawNum = parseFloat(row[valField]);
+                let numVal = !isNaN(rawNum) ? rawNum : 1;
+                
+                if (matrix[rVal] && matrix[rVal][cVal]) {
+                    matrix[rVal][cVal].push(numVal);
+                    rowTotalCache[rVal].push(numVal);
+                    matrixDataRows[rVal][cVal].push(row);
+                    matrixDataRows[rVal]['__ROW_TOTAL__'].push(row);
+                    matrixDataRows['__COL_TOTAL__'][cVal].push(row);
+                    matrixDataRows['__GRAND_TOTAL__'].push(row);
+                }
+            });
+
+            function calcAggregate(arr) {
+                if (!arr || arr.length === 0) return 0;
+                if (aggType === 'COUNT') return arr.length;
+                if (aggType === 'SUM') return arr.reduce((acc, v) => acc + v, 0);
+                if (aggType === 'AVERAGE') return arr.reduce((acc, v) => acc + v, 0) / arr.length;
+                return 0;
+            }
+
+            // Sorting
+            if (pivotSortCol) {
+                rowKeys.sort((a, b) => {
+                    let valA = 0, valB = 0;
+                    if (pivotSortCol === '__ROW_TOTAL__') { 
+                        valA = calcAggregate(rowTotalCache[a]); 
+                        valB = calcAggregate(rowTotalCache[b]); 
+                    } else if (matrix[a][pivotSortCol] && matrix[b][pivotSortCol]) { 
+                        valA = calcAggregate(matrix[a][pivotSortCol]); 
+                        valB = calcAggregate(matrix[b][pivotSortCol]); 
+                    }
+                    return pivotSortAsc ? valA - valB : valB - valA;
+                });
+            }
+
+            // Table Header
+            let headHTML = `<tr><th class="p-3 bg-slate-200 border border-slate-300 text-slate-800 font-bold sticky left-0 z-20 min-w-[140px] shadow-sm">${rowField} \\ ${colField || 'Summary'}</th>`;
+            colKeys.forEach(c => {
+                const sortIcon = pivotSortCol === c ? (pivotSortAsc ? '▲' : '▼') : '';
+                headHTML += `<th onclick="sortPivotTable('${c.replace(/'/g, "\\'")}')" class="p-3 border border-slate-300 text-center font-bold text-slate-700 bg-slate-100 min-w-[90px] sortable-header" title="Click to sort">${c} <span class="text-blue-500 text-[10px] ml-0.5">${sortIcon}</span></th>`;
+            });
+            const rowTotalIcon = pivotSortCol === '__ROW_TOTAL__' ? (pivotSortAsc ? '▲' : '▼') : '';
+            headHTML += `<th onclick="sortPivotTable('__ROW_TOTAL__')" class="p-3 border border-slate-300 text-center font-bold text-blue-900 bg-blue-100 min-w-[100px] sortable-header" title="Click to sort totals">Row Total <span class="text-blue-600 text-[10px] ml-0.5">${rowTotalIcon}</span></th></tr>`;
+            tableHead.innerHTML = headHTML;
+
+            const colTotals = {};
+            colKeys.forEach(c => { colTotals[c] = []; });
+            let grandTotalList = [];
+            let bodyHTML = '';
+
+            // Grand Total Top Row
+            bodyHTML += `<tr class="bg-blue-50/90 font-bold border-b-2 border-slate-300 shadow-sm">
+                <td class="p-3 text-slate-900 sticky left-0 bg-blue-100/90 border border-slate-300 text-center z-10">Grand Total</td>`;
+            
+            colKeys.forEach(c => {
+                rowKeys.forEach(r => {
+                    const arr = matrix[r][c];
+                    colTotals[c].push(...arr);
+                    grandTotalList.push(...arr);
+                });
+                const colAgg = calcAggregate(colTotals[c]);
+                const displayColAgg = colAgg === 0 ? '-' : (aggType === 'AVERAGE' ? colAgg.toFixed(1) : colAgg.toLocaleString());
+                bodyHTML += `<td onclick="showDetails('__COL_TOTAL__', '${c.replace(/'/g, "\\'")}')" class="p-3 text-right text-blue-900 border border-slate-300 pivot-cell font-semibold" title="View column details">${displayColAgg}</td>`;
+            });
+            const grandTotalAgg = calcAggregate(grandTotalList);
+            const displayGrandTotal = grandTotalAgg === 0 ? '-' : (aggType === 'AVERAGE' ? grandTotalAgg.toFixed(1) : grandTotalAgg.toLocaleString());
+            bodyHTML += `<td onclick="showDetails('__GRAND_TOTAL__', null)" class="p-3 text-right text-blue-950 bg-blue-200 border border-slate-300 pivot-cell font-black" title="View all details">${displayGrandTotal}</td></tr>`;
+
+            // Individual Data Rows
+            rowKeys.forEach(r => {
+                const safeR = r.replace(/'/g, "\\'");
+                bodyHTML += `<tr class="hover:bg-blue-50/40 transition-colors"><td class="p-2.5 font-semibold text-slate-800 bg-white border border-slate-200 sticky left-0 z-10">${r}</td>`;
+                colKeys.forEach(c => {
+                    const safeC = c.replace(/'/g, "\\'");
+                    const arr = matrix[r][c];
+                    const val = calcAggregate(arr);
+                    const displayVal = val === 0 ? '-' : (aggType === 'AVERAGE' ? val.toFixed(1) : val.toLocaleString());
+                    bodyHTML += `<td onclick="showDetails('${safeR}', '${safeC}')" class="p-2.5 text-right border border-slate-200 text-slate-700 pivot-cell" title="Click to view details">${displayVal}</td>`;
+                });
+                const rowAgg = calcAggregate(rowTotalCache[r]);
+                const displayRowAgg = rowAgg === 0 ? '-' : (aggType === 'AVERAGE' ? rowAgg.toFixed(1) : rowAgg.toLocaleString());
+                bodyHTML += `<td onclick="showDetails('${safeR}', '__ROW_TOTAL__')" class="p-2.5 text-right font-bold text-blue-900 bg-slate-50 border border-slate-200 pivot-cell" title="Click to view row details">${displayRowAgg}</td></tr>`;
+            });
+
+            tableBody.innerHTML = bodyHTML;
+            badge.innerText = `Summary: [${valField}] ${aggType === 'COUNT' ? 'Count' : aggType === 'SUM' ? 'Sum' : 'Average'} | Total ${filteredRowsCache.length.toLocaleString()} rows`;
+            badge.classList.remove('hidden');
+        }
+
+        // ----------------------------------------
+        // 7. Detail Data View
+        // ----------------------------------------
+        function showDetails(rowKey, colKey) {
+            let targetData = [];
+            let desc = '';
+            if (rowKey === '__GRAND_TOTAL__') { 
+                targetData = matrixDataRows['__GRAND_TOTAL__']; 
+                desc = 'Grand Total (All)'; 
+            } else if (rowKey === '__COL_TOTAL__') { 
+                targetData = matrixDataRows['__COL_TOTAL__'][colKey]; 
+                desc = `[Col Total] ${colKey}`; 
+            } else if (colKey === '__ROW_TOTAL__') { 
+                targetData = matrixDataRows[rowKey]['__ROW_TOTAL__']; 
+                desc = `[Row Total] ${rowKey}`; 
+            } else { 
+                targetData = matrixDataRows[rowKey][colKey]; 
+                desc = `[${rowKey} / ${colKey}]`; 
+            }
+
+            if (!targetData || targetData.length === 0) return alert('No detail data available for this item.');
+
+            currentDetailRows = [...targetData];
+            document.getElementById('detailsTitle').innerText = `🔍 Detail Data: ${desc} (Total ${currentDetailRows.length.toLocaleString()} items)`;
+            
+            renderDetailFieldCheckboxes();
+            
+            currentSortField = selectedDetailFields.length > 0 ? selectedDetailFields[0] : '';
+            currentSortAsc = true;
+            
+            const detailSec = document.getElementById('detailsSection');
+            detailSec.classList.remove('hidden');
+            renderDetailsTable();
+            detailSec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function renderDetailFieldCheckboxes() {
+            const container = document.getElementById('detailFieldCheckboxContainer');
+            container.innerHTML = '';
+            currentFields.forEach(field => {
+                const isChecked = selectedDetailFields.includes(field) ? 'checked' : '';
+                const safeFieldVal = field.replace(/"/g, '&quot;');
+                const label = document.createElement('label');
+                label.className = "inline-flex items-center gap-1.5 bg-blue-50/70 border border-blue-200 px-2.5 py-1 rounded-md cursor-pointer hover:bg-blue-100 transition-colors";
+                label.innerHTML = `
+                    <input type="checkbox" value="${safeFieldVal}" ${isChecked} onchange="updateSelectedDetailFields()" class="w-3 h-3 text-blue-600 rounded border-blue-300 focus:ring-blue-500 cursor-pointer">
+                    <span class="text-[11px] font-medium text-blue-900 select-none">${field}</span>
+                `;
+                container.appendChild(label);
+            });
+        }
+
+        function toggleAllDetailFields(check) {
+            const container = document.getElementById('detailFieldCheckboxContainer');
+            container.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = check);
+            updateSelectedDetailFields();
+        }
+
+        function updateSelectedDetailFields() {
+            const container = document.getElementById('detailFieldCheckboxContainer');
+            const checkedBoxes = Array.from(container.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
+            selectedDetailFields = checkedBoxes;
+            renderDetailsTable();
+        }
+
+        function renderDetailsTable() {
+            const thead = document.getElementById('detailsHead');
+            const tbody = document.getElementById('detailsBody');
+            
+            let headHTML = '<tr>';
+            selectedDetailFields.forEach(field => {
+                const sortIcon = currentSortField === field ? (currentSortAsc ? '▲' : '▼') : '↕';
+                const textColor = currentSortField === field ? 'text-blue-600 font-bold' : 'text-slate-400';
+                const safeFieldArg = field.replace(/'/g, "\\'");
+                headHTML += `
+                    <th onclick="sortDetails('${safeFieldArg}')" class="p-3 detail-sortable whitespace-nowrap min-w-[80px]">
+                        ${field} <span class="${textColor} text-[10px] ml-1">${sortIcon}</span>
+                    </th>
+                `;
+            });
+            headHTML += '</tr>';
+            thead.innerHTML = headHTML;
+
+            tbody.innerHTML = currentDetailRows.map(row => {
+                let rowHTML = '<tr class="hover:bg-slate-50 transition-colors">';
+                selectedDetailFields.forEach(field => {
+                    const val = row[field] !== undefined && row[field] !== null ? row[field] : '';
+                    rowHTML += `<td class="p-2.5 border-b border-slate-100 text-slate-700 whitespace-nowrap">${val}</td>`;
+                });
+                rowHTML += '</tr>';
+                return rowHTML;
+            }).join('');
+        }
+
+        function sortDetails(field) {
+            if (currentSortField === field) {
+                currentSortAsc = !currentSortAsc;
+            } else {
+                currentSortField = field;
+                currentSortAsc = true;
+            }
+
+            currentDetailRows.sort((a, b) => {
+                let valA = a[field] !== undefined && a[field] !== null ? a[field] : '';
+                let valB = b[field] !== undefined && b[field] !== null ? b[field] : '';
+
+                const isDateStrA = typeof valA === 'string' && /^\d{4}-\d{2}-\d{2}/.test(valA);
+                const isDateStrB = typeof valB === 'string' && /^\d{4}-\d{2}-\d{2}/.test(valB);
+
+                if (isDateStrA || isDateStrB) {
+                    const timeA = new Date(valA).getTime() || 0;
+                    const timeB = new Date(valB).getTime() || 0;
+                    return currentSortAsc ? timeA - timeB : timeB - timeA;
+                }
+
+                if (typeof valA === 'number' && typeof valB === 'number') {
+                    return currentSortAsc ? valA - valB : valB - valA;
+                }
+
+                valA = String(valA);
+                valB = String(valB);
+                return currentSortAsc 
+                    ? valA.localeCompare(valB, undefined, { numeric: true }) 
+                    : valB.localeCompare(valA, undefined, { numeric: true });
+            });
+            renderDetailsTable();
+        }
+
+        // ----------------------------------------
+        // 8. CSV Export (Pivot Table & Details)
+        // ----------------------------------------
+        function downloadPivotAsCSV() {
+            const table = document.getElementById('pivotTable');
+            if (!table || table.rows.length <= 1) return alert('No pivot table data to export.');
+            let csvContent = '\uFEFF';
+            for (let r of table.rows) {
+                let rowData = [];
+                for (let c of r.cells) {
+                    let text = c.innerText.replace(/"/g, '""');
+                    rowData.push(`"${text}"`);
+                }
+                csvContent += rowData.join(',') + '\r\n';
+            }
+            triggerDownload(csvContent, `Crane_Pivot_${new Date().toISOString().slice(0,10)}.csv`);
+        }
+
+        function downloadDetailsAsCSV() {
+            if (!currentDetailRows || currentDetailRows.length === 0) {
+                return alert('No detail data to export.');
+            }
+            let csvContent = '\uFEFF';
+            // Header
+            csvContent += selectedDetailFields.map(f => `"${f.replace(/"/g, '""')}"`).join(',') + '\r\n';
+            // Data rows
+            currentDetailRows.forEach(row => {
+                const line = selectedDetailFields.map(f => {
+                    const val = row[f] !== undefined && row[f] !== null ? String(row[f]) : '';
+                    return `"${val.replace(/"/g, '""')}"`;
+                }).join(',');
+                csvContent += line + '\r\n';
+            });
+            triggerDownload(csvContent, `Crane_Details_${new Date().toISOString().slice(0,10)}.csv`);
+        }
+
+        function triggerDownload(content, filename) {
+            const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.setAttribute('download', filename);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // ----------------------------------------
+        // 9. App Initialization
+        // ----------------------------------------
+        window.addEventListener('DOMContentLoaded', () => {
+            checkAuthStatusOnLoad();
+        });
+    </script>
+</body>
+</html>
